@@ -133,6 +133,8 @@ static void status_init(void)
     status_flags[SERVER_BUSY_LOG] = 'L';
     status_flags[SERVER_BUSY_DNS] = 'D';
     status_flags[SERVER_GRACEFUL] = 'G';
+    status_flags[SERVER_CLOSING] = 'C';
+    status_flags[SERVER_IDLE_KILL] = 'I';
 }
 
 /* Format the number of bytes nicely */
@@ -281,13 +283,23 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
     for(i = 0; i < HARD_SERVER_LIMIT; i++){
         scoreboard_image.servers[i] = (worker_score*)((char*) scoreboard_image.parent + sizeof(process_score) * HARD_SERVER_LIMIT + sizeof(worker_score) * i );
     }
+
     scoreboard_image.balancers = NULL;
     ap_scoreboard_image = &scoreboard_image;
 
+    if ( (size_t) param_scoreboard_image == -1) {
+        fputs ("Apache not running\n",stderr);
+        exit (2);
+    }
+
     ap_my_generation = ap_scoreboard_image->parent[0].generation;
 #else   /*__APACHE_2*/
-    ap_generation_t ap_my_generation =
-    ap_scoreboard_image->parent[0].generation;
+    if ( (size_t) ap_scoreboard_image == -1) {
+        fputs ("Apache not running\n",stderr);
+        exit (2);
+    }
+
+    ap_generation_t ap_my_generation = ap_scoreboard_image->parent[0].generation;
 #endif     /*__APACHE_2*/
 
     tu = ts = tcu = tcs = 0;
@@ -346,6 +358,8 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
             if (status_flags[i] != 0)
                 printf("%c:%d ", status_flags[i], statusresults[i]);
         }
+        printf("acc:%lu ", count);
+        printf("kb:%lu ", kbcount);
         return;
     }
 
@@ -386,9 +400,10 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
     printf("\n");
     printf("\n");
     printf("Scoreboard key:\n");
-    printf("\"_\" Waiting for connection, \"S\" Starting up, \"R\" Reading request,\n");
-    printf("\"W\" Sending reply, \"K\" Keepalive (read), \"D\" DNS lookup,\n");
-    printf("\"L\" Logging, \"G\" Gracefully finishing, \".\" Open slot with no current process\n");
+    printf("\"_\" Waiting for Connection, \"S\" Starting up, \"R\" Reading Request,\n");
+    printf("\"W\" Sending Reply, \"K\" Keepalive (read), \"D\" DNS Lookup,\n");
+    printf("\"C\" Closing connection, \"L\" Logging, \"G\" Gracefully finishing,\n");
+    printf("\"I\" Idle cleanup of worker, \".\" Open slot with no current process\n");
     printf("\n");
 
     if(mode == HTTPD_INFO  || mode == PERL_INFO){
@@ -422,10 +437,9 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
             req_time = 0L;
         }
         else {
-            req_time = ((score_record->stop_time.tv_sec -
-               score_record->start_time.tv_sec) * 1000)
-               ((score_record->stop_time.tv_usec -
-                score_record->start_time.tv_usec) / 1000);
+            req_time = ((score_record->stop_time.tv_sec - score_record->start_time.tv_sec) * 1000)
+                       +
+                       ((score_record->stop_time.tv_usec - score_record->start_time.tv_usec) / 1000);
         }
 #endif     /*__APACHE_2*/
         if (req_time < 0L) {
@@ -475,18 +489,28 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
                     case SERVER_GRACEFUL:
                         printf("G\t");
                         break;
+                    case SERVER_CLOSING:
+                        printf("C\t");
+                        break;
+                    case SERVER_IDLE_KILL:
+                        printf("I\t");
+                        break;
                     default:
                         printf("?\t");
                         break;
                 }
                 printf(" %.2f\t%.0f\t%ld\t",
-                    (score_record->times.tms_utime + score_record->times.tms_stime + score_record->times.tms_cutime + score_record->times.tms_cstime) / tick,
+                    (  score_record->times.tms_utime
+                     + score_record->times.tms_stime
+                     + score_record->times.tms_cutime
+                     + score_record->times.tms_cstime) / tick,
 #ifdef OPTIMIZE_TIMEOUTS
                      difftime(nowtime, ps_record.last_rtime),
 #else
-                     difftime(nowtime, score_record->last_used),
+                     difftime(nowtime, apr_time_sec(score_record->last_used)),
 #endif
                      (long) req_time);
+
                 printf("%-1.1f\t%-2.2f\t%-2.2f\t", (float) conn_bytes / KBYTE, (float) my_bytes / MBYTE, (float) bytes / MBYTE);
                 if (score_record->status == SERVER_BUSY_READ) {
                     printf("?\t\t ?\t\t..reading.. \n");
