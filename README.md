@@ -4,7 +4,8 @@ Accesses Apache 2 shared memory segment directly to display server
 status information.
 
 This software is based off httpd-stat by Gossamer Threads Inc.
-Copyright (c) 2010 Gossamer Threads Inc. and distributed under the GPLv2
+
+Copyright (c) 2010 Gossamer Threads Inc. distributed under the GPLv2
 
 See httpd-status.c for a list of changes
 
