@@ -39,29 +39,30 @@
 #endif /*__APACHE_2*/
 
 #define KBYTE            1024
-#define    MBYTE            1048576L
-#define    GBYTE            1073741824L
-#define HTTPD_INFO 0
-#define PERL_INFO  1
-#define true 1
-#define false 0
-#define MODPERL_STR "modperl-stat"
-#define HTTPD_STR "httpd-stat"
+#define MBYTE            1048576L
+#define GBYTE            1073741824L
+#define HTTPD_INFO       0
+#define PERL_INFO        1
+#define true             1
+#define false            0
+#define MODPERL_STR      "modperl-stat"
+#define HTTPD_STR        "httpd-stat"
 
 typedef struct info_shm{
-  int shmid;
-  int pid;
-  int uid;
-  struct info_shm * next;
+    int shmid;
+    int pid;
+    int uid;
+    struct info_shm * next;
 }info_shm;
-
 static char status_flags[SERVER_NUM_STATUS];
+
 #ifdef __APACHE_2
 static int HARD_SERVER_LIMIT;
 struct serverlimit{
     int MaxClients;
     int ServerLimit;
 };
+
 void readlimits(struct serverlimit * limit,char * filename)
 {
     FILE *fd;
@@ -84,6 +85,8 @@ void readlimits(struct serverlimit * limit,char * filename)
 
     free(buffer);
 }
+
+
 int get_server_limit(void)
 {
     struct serverlimit limit ={256,256};
@@ -117,6 +120,8 @@ int get_server_limit(void)
     return limit.ServerLimit;
 }
 #endif /*__APACHE_2*/
+
+
 static void status_init(void)
 {
     status_flags[SERVER_DEAD] = '.';     /* We don't want to assume these are in */
@@ -162,24 +167,6 @@ static void format_kbyte_out(unsigned long kbytes)
 
 void printStatusOverview(scoreboard * sb)
 {
-    int i;
-    for (i = 0; i < HARD_SERVER_LIMIT; i++) {
-        if (i % 64 == 0) {
-            printf("\n");
-        }
-#ifdef __APACHE_2
-        printf("%c", status_flags[sb->servers[i]->status]);
-#else   /*__APACHE_2*/
-        printf("%c", status_flags[sb->servers[i].status]);
-#endif     /*__APACHE_2*/
-    }
-    printf("\n");
-    printf("\n");
-    printf("Scoreboard key:\n");
-    printf("\"_\" Waiting for connection, \"S\" Starting up, \"R\" Reading request,\n");
-    printf("\"W\" Sending reply, \"K\" Keepalive (read), \"D\" DNS lookup,\n");
-    printf("\"L\" Logging, \"G\" Gracefully finishing, \".\" Open slot with no current process\n");
-    printf("\n");
 }
 
 static char gt_flags[SERVER_NUM_STATUS];
@@ -245,9 +232,9 @@ static void show_time(char *r, time_t tsecs)
 }
 
 #ifdef __APACHE_2
-void displayApacheShm(scoreboard * param_scoreboard_image,int httpdPid,int mode)
+void displayApacheShm(scoreboard * param_scoreboard_image, int httpdPid, int mode, int snmp)
 #else   /*__APACHE_2*/
-void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
+void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, int snmp)
 #endif     /*__APACHE_2*/
 {
     time_t nowtime = time(NULL);
@@ -263,13 +250,11 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
     unsigned long bcount = 0;
     unsigned long kbcount = 0;
     long req_time;
-#ifndef NO_TIMES
 #ifdef _SC_CLK_TCK
     float tick = sysconf(_SC_CLK_TCK);
-#else
+#else  /*_SC_CLK_TCK */
     float tick = HZ;
-#endif
-#endif
+#endif /*_SC_CLK_TCK */
     int short_report = 0;
 #ifdef __APACHE_2
     worker_score * score_record;
@@ -299,8 +284,6 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
     scoreboard_image.balancers = NULL;
     ap_scoreboard_image = &scoreboard_image;
 
-
-    //ap_generation_t ap_my_generation = ap_scoreboard_image->parent[0].generation;
     ap_my_generation = ap_scoreboard_image->parent[0].generation;
 #else   /*__APACHE_2*/
     ap_generation_t ap_my_generation =
@@ -309,7 +292,6 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
 
     tu = ts = tcu = tcs = 0;
     ap_restart_time = getRestartTime(httpdPid);
-
 
     for (i = 0; i < HARD_SERVER_LIMIT; ++i) {
 #ifdef __APACHE_2
@@ -331,12 +313,10 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
         lres = score_record->access_count;
         bytes = score_record->bytes_served;
         if (lres != 0 || (res != SERVER_READY && res != SERVER_DEAD)) {
-#ifndef NO_TIMES
             tu += score_record->times.tms_utime;
             ts += score_record->times.tms_stime;
             tcu += score_record->times.tms_cutime;
             tcs += score_record->times.tms_cstime;
-#endif                /* NO_TIMES */
             count += lres;
             bcount += bytes;
             if (bcount >= KBYTE) {
@@ -349,91 +329,104 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
     up_time = nowtime - ap_restart_time;
     show_time(ShowUptime, up_time);
 
-    printf("  Restart time: %s  Parent server generation: %d\n  Server uptime:%s\n",
-    ctime(&ap_restart_time),ap_my_generation, ShowUptime);
+    if (snmp == 1) {
+        int statusresults[SERVER_NUM_STATUS];
+        for ( i = 0; i < SERVER_NUM_STATUS-1; i++) {
+            statusresults[i] = 0;
+        }
+        for (i = 0; i < HARD_SERVER_LIMIT; i++) {
+#ifdef __APACHE_2
+            statusresults[ap_scoreboard_image->servers[i]->status]++;
+#else  /*__APACHE_2*/
+            statusresults[ap_scoreboard_image->servers[i].status]++;
+#endif /*__APACHE_2*/
+        }
+
+        for ( i = 0; i < SERVER_NUM_STATUS-1; i++) {
+            if (status_flags[i] != 0)
+                printf("%c:%d ", status_flags[i], statusresults[i]);
+        }
+        return;
+    }
+
+    printf("  Restart time: %s  Parent server generation: %d\n  Server uptime:%s\n", ctime(&ap_restart_time) ,ap_my_generation, ShowUptime);
     printf("  Total accesses: %lu - Total traffic: ", count);
     format_kbyte_out(kbcount);
 
-#ifndef NO_TIMES
-    /* Allow for OS/2 not having CPU stats */
-    printf("\n  CPU usage: u%g s%g cu%g cs%g", tu / tick, ts / tick,
-       tcu / tick, tcs / tick);
+    printf("\n  CPU usage: u%g s%g cu%g cs%g", tu / tick, ts / tick, tcu / tick, tcs / tick);
     if (ts || tu || tcu || tcs) {
-        printf(" - %.3g%% CPU load\n",
-           (tu + ts + tcu + tcs) / tick / up_time * 100.);
+        printf(" - %.3g%% CPU load\n", (tu + ts + tcu + tcs) / tick / up_time * 100.);
     }
-#endif
     if (up_time > 0) {
         printf("  %.3g requests/sec - ", (float) count / (float) up_time);
     }
 
     if (up_time > 0) {
-        format_byte_out((unsigned long) (KBYTE * (float) kbcount /
-            (float) up_time));
+        format_byte_out((unsigned long) (KBYTE * (float) kbcount / (float) up_time));
         printf("/second - ");
     }
 
     if (count > 0) {
-        format_byte_out((unsigned long) (KBYTE * (float) kbcount /
-            (float) count));
+        format_byte_out((unsigned long) (KBYTE * (float) kbcount / (float) count));
         printf("/request\n");
     }
 
-    printf("\n  %d requests currently being processed, %d idle servers\n",
-        busy, ready);
+    printf("\n  %d requests currently being processed, %d idle servers\n", busy, ready);
 
-    printStatusOverview(ap_scoreboard_image);
+    for (i = 0; i < HARD_SERVER_LIMIT; i++) {
+        if (i % 64 == 0) {
+            printf("\n");
+        }
+#ifdef __APACHE_2
+        printf("%c", status_flags[ap_scoreboard_image->servers[i]->status]);
+#else  /*__APACHE_2*/
+        printf("%c", status_flags[ap_scoreboard_image->servers[i].status]);
+#endif /*__APACHE_2*/
+    }
+    printf("\n");
+    printf("\n");
+    printf("Scoreboard key:\n");
+    printf("\"_\" Waiting for connection, \"S\" Starting up, \"R\" Reading request,\n");
+    printf("\"W\" Sending reply, \"K\" Keepalive (read), \"D\" DNS lookup,\n");
+    printf("\"L\" Logging, \"G\" Gracefully finishing, \".\" Open slot with no current process\n");
+    printf("\n");
 
     if(mode == HTTPD_INFO  || mode == PERL_INFO){
         printf ("Srv\tPID\tAcc\tM\tCPU\tSS\tReq\tConn\tChild\tSlot\tHost\t\t VHost\t\tRequest\n");
         for (i = 0; i < HARD_SERVER_LIMIT; ++i) {
-        ps_record = ap_scoreboard_image->parent[i];
+            ps_record = ap_scoreboard_image->parent[i];
 #ifdef __APACHE_2
-        score_record = ap_scoreboard_image->servers[i];
-        vhost = score_record->vhost;
+            score_record = ap_scoreboard_image->servers[i];
+            vhost = score_record->vhost;
 #else   /*__APACHE_2*/
-        score_record = &ap_scoreboard_image->servers[i];
-        vhost = score_record->vhostrec;
+            score_record = &ap_scoreboard_image->servers[i];
+            vhost = score_record->vhostrec;
 #endif     /*__APACHE_2*/
-        if (ps_record.generation != ap_my_generation) {
-            vhost = NULL;
-        }
+            if (ps_record.generation != ap_my_generation) {
+                vhost = NULL;
+            }
 
 #ifdef __APACHE_2
-        if (score_record->start_time == (clock_t) 0) {
-            req_time = 0L;
-        }
-        else {
-            req_time = (long)((score_record->stop_time - score_record->start_time) / 1000);
-            req_time = score_record->stop_time - score_record->start_time;
-            req_time = (req_time * 1000) / (int) tick;
-        }
+            if (score_record->start_time == (clock_t) 0) {
+                req_time = 0L;
+            }
+            else {
+                req_time = (long)((score_record->stop_time - score_record->start_time) / 1000);
+                req_time = score_record->stop_time - score_record->start_time;
+                req_time = (req_time * 1000) / (int) tick;
+            }
 
 #else   /*__APACHE_2*/
-#if defined(NO_GETTIMEOFDAY)
-#ifndef NO_TIMES
-        if (score_record->start_time == (clock_t) 0) {
-#endif                /* NO_TIMES */
-            req_time = 0L;
-#ifndef NO_TIMES
-        }
-        else {
-            req_time = score_record->stop_time - score_record.start_time;
-            req_time = (req_time * 1000) / (int) tick;
-        }
-#endif                /* NO_TIMES */
-#else
         if (score_record->start_time.tv_sec == 0L &&
             score_record->start_time.tv_usec == 0L) {
             req_time = 0L;
         }
         else {
             req_time = ((score_record->stop_time.tv_sec -
-               score_record->start_time.tv_sec) * 1000) +
+               score_record->start_time.tv_sec) * 1000)
                ((score_record->stop_time.tv_usec -
                 score_record->start_time.tv_usec) / 1000);
         }
-#endif
 #endif     /*__APACHE_2*/
         if (req_time < 0L) {
             req_time = 0L;
@@ -446,67 +439,55 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
         my_bytes = score_record->my_bytes_served;
         conn_bytes = score_record->conn_bytes;
 
-        if (lres != 0
-            || (score_record->status != SERVER_READY
-            && score_record->status != SERVER_DEAD)) {
+        if (lres != 0 || (score_record->status != SERVER_READY && score_record->status != SERVER_DEAD)) {
             if (!short_report) {
                 if (score_record->status == SERVER_DEAD) {
-                    printf("%d-%d\t-\t%d/%lu/%lu\t",
-                       i, (int) ps_record.generation,
-                       (int) conn_lres, my_lres, lres);
+                    printf("%d-%d\t-\t%d/%lu/%lu\t", i, (int) ps_record.generation, (int) conn_lres, my_lres, lres);
                 }
                 else {
-                    printf("%d-%d\t%d\t%d/%lu/%lu\t",
-                       i, (int) ps_record.generation,
-                       (int) ps_record.pid, (int) conn_lres,
-                       my_lres, lres);
+                    printf("%d-%d\t%d\t%d/%lu/%lu\t", i, (int) ps_record.generation, (int) ps_record.pid, (int) conn_lres, my_lres, lres);
                 }
                 switch (score_record->status) {
-                case SERVER_READY:
-                    printf("_\t");
-                    break;
-                case SERVER_STARTING:
-                    printf("S\t");
-                    break;
-                case SERVER_BUSY_READ:
-                    printf("R\t");
-                    break;
-                case SERVER_BUSY_WRITE:
-                    printf("W\t");
-                    break;
-                case SERVER_BUSY_KEEPALIVE:
-                    printf("K\t");
-                    break;
-                case SERVER_BUSY_LOG:
-                    printf("L\t");
-                    break;
-                case SERVER_BUSY_DNS:
-                    printf("D\t");
-                    break;
-                case SERVER_DEAD:
-                    printf(".\t");
-                    break;
-                case SERVER_GRACEFUL:
-                    printf("G\t");
-                    break;
-                default:
-                    printf("?\t");
-                    break;
+                    case SERVER_READY:
+                        printf("_\t");
+                        break;
+                    case SERVER_STARTING:
+                        printf("S\t");
+                        break;
+                    case SERVER_BUSY_READ:
+                        printf("R\t");
+                        break;
+                    case SERVER_BUSY_WRITE:
+                        printf("W\t");
+                        break;
+                    case SERVER_BUSY_KEEPALIVE:
+                        printf("K\t");
+                        break;
+                    case SERVER_BUSY_LOG:
+                        printf("L\t");
+                        break;
+                    case SERVER_BUSY_DNS:
+                        printf("D\t");
+                        break;
+                    case SERVER_DEAD:
+                        printf(".\t");
+                        break;
+                    case SERVER_GRACEFUL:
+                        printf("G\t");
+                        break;
+                    default:
+                        printf("?\t");
+                        break;
                 }
                 printf(" %.2f\t%.0f\t%ld\t",
-                    (score_record->times.tms_utime +
-                     score_record->times.tms_stime +
-                     score_record->times.tms_cutime +
-                     score_record->times.tms_cstime) / tick,
+                    (score_record->times.tms_utime + score_record->times.tms_stime + score_record->times.tms_cutime + score_record->times.tms_cstime) / tick,
 #ifdef OPTIMIZE_TIMEOUTS
                      difftime(nowtime, ps_record.last_rtime),
 #else
                      difftime(nowtime, score_record->last_used),
 #endif
                      (long) req_time);
-                printf("%-1.1f\t%-2.2f\t%-2.2f\t",
-                    (float) conn_bytes / KBYTE,
-                    (float) my_bytes / MBYTE, (float) bytes / MBYTE);
+                printf("%-1.1f\t%-2.2f\t%-2.2f\t", (float) conn_bytes / KBYTE, (float) my_bytes / MBYTE, (float) bytes / MBYTE);
                 if (score_record->status == SERVER_BUSY_READ) {
                     printf("?\t\t ?\t\t..reading.. \n");
                 }
@@ -517,11 +498,9 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
                     client[i] = score_record->client[i];
                     client[31] = '\0';
 #ifdef __APACHE_2
-                    printf("%s\t %s \t%s\n", client,vhost,
-                       score_record->request);
+                    printf("%s\t %s \t%s\n", client, vhost, score_record->request);
 #else /*__APACHE_2*/
-                    printf("%s\t %s \t%s\n", client, "(unavailable)",
-                       score_record->request);
+                    printf("%s\t %s \t%s\n", client, "(unavailable)", score_record->request);
 #endif /*__APACHE_2*/
                 }
 
@@ -549,6 +528,7 @@ void displayApacheShm(scoreboard * ap_scoreboard_image,int httpdPid,int mode)
    free(scoreboard_image.servers);
 #endif /* __APACHE_2*/
 }
+
 int get_perl_instance(int pid,char* field)
 {
     int i,j,nbread;
@@ -560,11 +540,14 @@ int get_perl_instance(int pid,char* field)
     /* onpen the /prov/pid/cmdline*/
     sprintf(cmdfilename,"/proc/%d/cmdline",pid);
     desc = fopen(cmdfilename, "r");
-    if(desc ==NULL){printf("imposible to open the file %s\n",cmdfilename); return false;}
+    if (desc == NULL) {
+        printf("Unable to open the file %s\n",cmdfilename);
+        return false;
+    }
 
-    /*pars the line : arg1\0arg2\0arg3\0*/
-    for (i = 0 ; i < 3 ; i++){
-        j = 0 ;
+    /*parse the line : arg1\0arg2\0arg3\0*/
+    for (i=0; i<3; i++){
+        j=0;
         do{
             nbread=fread(&data,1,1, desc);
             if(nbread) {
@@ -574,21 +557,19 @@ int get_perl_instance(int pid,char* field)
                 break;
             }
             j++;
-        }while(data!='\0' );
+        } while ( data != '\0' );
     }
     fclose(desc);
     /*if cmdline is : /usr/sbin/httpd -f /var/home/...*/
-    if(strcmp(cmdargs[0],"/usr/sbin/httpd")==0 &&
-        strcmp(cmdargs[1],"-f")==0&&
-        strncmp(cmdargs[2],"/var/home/",10)==0) {
+    if ( strcmp(cmdargs[0], "/usr/sbin/httpd") == 0 && strcmp(cmdargs[1], "-f") == 0 && strncmp(cmdargs[2],"/var/home/",10) == 0 ) {
 
-        /*extract the domain name from  /var/home/username/domainename/modperl.conf in field*/
+        /* extract the domain name from /var/home/username/domainename/modperl.conf in field */
         int end,start;
-        for(i =strlen(cmdargs[2]);cmdargs[2][i]!='/';i--);
-        end=i;
-        for(i =end-1;cmdargs[2][i]!='/';i--);
-        start=i;
-        for(i=0;i<(end -start-1);i++){
+        for(i=strlen(cmdargs[2]); cmdargs[2][i]!='/'; i--);
+            end=i;
+        for(i=end-1; cmdargs[2][i]!='/'; i--);
+            start=i;
+        for(i=0; i<(end -start-1); i++) {
             field[i]=cmdargs[2][start+i+1];
         }
         field[i]='\0';
@@ -725,6 +706,7 @@ int main(int argc, char *argv[])
     info_shm *info_shared_memory;
     pid_t forkid;
     int mode;
+    int snmp;
     char instancename[256];
 
     /* on apache 2 the server limit is a parameter: not hard coded */
@@ -734,8 +716,11 @@ int main(int argc, char *argv[])
 
     if (matchname(argv[0],HTTPD_STR) ){
         mode=HTTPD_INFO;
-        if(argc !=1 ){
-            printf ("Usage : \n%s",argv[0]);
+        if (( argc == 2) && (strcmp(argv[1], "-r") == 0)) {
+            snmp=1;
+        } else if (argc !=1 ){
+            printf ("Usage: \n-r  Dump raw stats\n");
+            return -1;
         }
     }
     else {
@@ -744,21 +729,25 @@ int main(int argc, char *argv[])
             #ifdef __APACHE_2
             HARD_SERVER_LIMIT  = 256;/*here I don't know how to get this number*/
             #endif /*__APACHE_2*/
-            if((argc ==3 ) && (strcmp(argv[1],"-d")==0)) {
+            if( argc ==3 && strcmp(argv[1],"-d") == 0 ) {
                 instance = argv[2];
+            }
+            else if ( argc == 2 && strcmp(argv[1],"-r") == 0) {
+                snmp=1;
             }
             else {
                 if(argc !=1){
-                    printf ("Usage : \n%s\n%s -d domainename \n",argv[0],argv[0]);
+                    printf ("Usage : \n%s\n%s -d domain \n",argv[0],argv[0]);
                     return -1;
                 }
             }
         }
         else {
             printf("executable launch with the wrong name : %s or %s \n",HTTPD_STR,MODPERL_STR);
-              return -1;
+            return -1;
         }
     }
+
 
     // Get shared memory information from the system
     info_shared_memory = get_scoreboard_shm(mode,instance);
@@ -771,24 +760,35 @@ int main(int argc, char *argv[])
             exit(0);
         }
 
-        /*display the begining of the message*/
         gethostname(hostname, 128);
-        printf("  Apache Server Status for %s\n",hostname);
-        printf("  Process belongs to  %s \n  ",((struct passwd *)getpwuid(info_shared_memory->uid))->pw_name);
-        if(mode == PERL_INFO) { /*display the name of the modperl instance */
-            if (get_perl_instance( info_shared_memory->pid,instancename) == false) {
+        if (mode == PERL_INFO) {
+           if (get_perl_instance( info_shared_memory->pid,instancename) == false) {
                 perror("Unable to instantiate ModPerl shared memory");
                 exit(0);
             }
-            printf("Modperl : %s \n  ",instancename);
+            fflush(NULL);
         }
-        fflush(NULL);
+
+        if (snmp == 0) {
+            /*display the begining of the message*/
+            printf("  Apache Server Status for %s\n",hostname);
+            printf("  Process belongs to  %s \n  ",((struct passwd *)getpwuid(info_shared_memory->uid))->pw_name);
+            if(mode == PERL_INFO) { /*display the name of the modperl instance */
+                printf("Modperl : %s \n  ",instancename);
+            }
+        }
 
         // call httpd -v to get server information
         forkid = fork();
         if (forkid == 0) {                // child
             // Code only executed by child process
-            execl("/usr/sbin/httpd","/usr/sbin/httpd", "-v", (char *) 0);
+            if (snmp == 0) {
+                execl("/usr/sbin/httpd","/usr/sbin/httpd", "-v", (char *) 0);
+            }
+            else {
+                freopen("/dev/null","w",stdout);
+                execl("/usr/sbin/httpd","/usr/sbin/httpd", "-v", (char *) 0);
+            }
         }
         else {
             // wait until the child quit
@@ -804,10 +804,17 @@ int main(int argc, char *argv[])
                 printf("error shmat\n");
                 exit(0);
             }
+            if (snmp == 1 && mode == PERL_INFO)
+                printf("%s=(",instancename);
+
             // display information from the shared memory
-            displayApacheShm((scoreboard *) shared,info_shared_memory->pid,mode);
+            displayApacheShm((scoreboard *) shared, info_shared_memory->pid, mode, snmp);
             shmdt(shared);
+
+            if (snmp == 1 && mode == PERL_INFO)
+                printf(")  ");
         }
+
         info_shared_memory = info_shared_memory->next;
     }
     free_info(info_shared_memory);
