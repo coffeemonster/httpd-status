@@ -1,5 +1,5 @@
 #
-# httpd-stat
+# httpd-status
 # 
 # Accesses Apache 1/2 shared memory segment directly to display server 
 # status information.
@@ -18,14 +18,12 @@ APACHE_VERSION = $(shell httpd -v | awk '{print ; exit}' | sed 's/Server version
 HARD_SERVER = $(shell httpd -V | grep HARD_SERVER_LIMIT |sed 's/.*=//g' )
 
 all: 
-	gcc httpd-stat.c -o httpd-stat -I/usr/include/apr-1/ -D__APACHE_$(APACHE_VERSION)  -D_GNU_SOURCE -DHARD_SERVER_LIMIT=$(HARD_SERVER)
+	gcc httpd-status.c -o httpd-status -I/usr/include/apr-1/ -D__APACHE_$(APACHE_VERSION)  -D_GNU_SOURCE -DHARD_SERVER_LIMIT=$(HARD_SERVER)
 	@ rm -f modperl-stat
-	@ ln -s httpd-stat modperl-stat
-	@ echo httpd-stat  modperl-stat
+	@ ln -s httpd-status modperl-stat
+	@ echo httpd-status  modperl-stat
 install:
-	install httpd-stat /usr/bin/httpd-stat 
+	install httpd-status /usr/bin/httpd-status
 	install modperl-stat /usr/bin/modperl-stat 
 clean:
-	@ rm -f httpd-stat modperl-stat
-
-
+	@ rm -f httpd-status modperl-stat
