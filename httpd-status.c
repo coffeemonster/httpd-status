@@ -133,8 +133,10 @@ static void status_init(void)
     status_flags[SERVER_BUSY_LOG] = 'L';
     status_flags[SERVER_BUSY_DNS] = 'D';
     status_flags[SERVER_GRACEFUL] = 'G';
+#ifdef __APACHE_2
     status_flags[SERVER_CLOSING] = 'C';
     status_flags[SERVER_IDLE_KILL] = 'I';
+#endif /*__APACHE_2*/
 }
 
 /* Format the number of bytes nicely */
@@ -486,6 +488,7 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
                     case SERVER_DEAD:
                         printf(".\t");
                         break;
+#ifdef __APACHE_2
                     case SERVER_GRACEFUL:
                         printf("G\t");
                         break;
@@ -495,6 +498,7 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
                     case SERVER_IDLE_KILL:
                         printf("I\t");
                         break;
+#endif /*__APACHE_2*/
                     default:
                         printf("?\t");
                         break;
