@@ -204,6 +204,9 @@ time_t getRestartTime(int httpdPid)
     stat_fn = (char *)malloc(sizeof(char)*20);
     sprintf(stat_fn, "/proc/%d/stat", httpdPid);
     sfp = fopen(stat_fn, "r");
+    if (sfp == NULL) {
+        exit (2);
+    }
     fread(buf,1024,1,sfp);
     fclose(sfp);
     strhold = strtok(buf, " ");
@@ -290,14 +293,12 @@ void displayApacheShm(scoreboard * ap_scoreboard_image, int httpdPid, int mode, 
     ap_scoreboard_image = &scoreboard_image;
 
     if ( (size_t) param_scoreboard_image == -1) {
-        fputs ("Apache not running\n",stderr);
         exit (2);
     }
 
     ap_my_generation = ap_scoreboard_image->parent[0].generation;
 #else   /*__APACHE_2*/
     if ( (size_t) ap_scoreboard_image == -1) {
-        fputs ("Apache not running\n",stderr);
         exit (2);
     }
 
